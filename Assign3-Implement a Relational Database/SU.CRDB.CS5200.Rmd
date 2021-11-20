@@ -1,0 +1,164 @@
+---
+title: "SU.CRDB.CS5200"
+author: Yuchao Su
+date: Oct 2, 2021
+output:
+  pdf_document: default
+  html_notebook: default
+---
+## Basic Config
+```{r}
+library(RSQLite)
+fpath = ("C:/Users/suyuc/Desktop/CS5200/")
+dbfile = "Course_Info.db"
+
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+```
+## Enable foreign key
+```{sql connection=dbcon}
+PRAGMA foreign_keys = ON;
+```
+
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Unit;
+```
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Course;
+```
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Prerequisite;
+```
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Lesson;
+```
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Subject;
+```
+
+## Create Table
+```{sql connection=dbcon}
+CREATE TABLE Course(
+cid TEXT PRIMARY KEY NOT NULL,
+title TEXT NOT NULL,
+lengthInDays INT NOT NULL
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Unit(
+cid TEXT NOT NULL,
+tid INT NOT NULL,
+PRIMARY KEY(cid,tid),
+FOREIGN KEY(cid) REFERENCES Course(cid),
+FOREIGN KEY(tid) REFERENCES Lesson(tid)
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Lesson(
+tid INT PRIMARY KEY NOT NULL,
+title TEXT NOT NULL,
+lengthInHrs INT NOT NULL,
+subjectId INT NOT NULL,
+FOREIGN KEY(subjectId) REFERENCES Subject(subjectId)
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Subject(
+subjectId INT PRIMARY KEY,
+content TEXT,
+CHECK (content IN ("ML", "SQL", "R", "JAVA"))
+);
+```
+
+
+```{sql connection=dbcon}
+CREATE TABLE Prerequisite(
+tid INT NOT NULL,
+pid INT NOT NULL,
+PRIMARY KEY(tid,pid),
+FOREIGN KEY(pid) REFERENCES Lesson(tid),
+FOREIGN KEY(pid) REFERENCES Lesson(tid)
+);
+```
+
+## Test Table
+```{sql connection=dbcon}
+INSERT INTO Course(cid,title,lengthInDays) VALUES
+("CS5200","DB",2),
+("EECE5550","MR",3),
+("EECE2560","C++",5);
+```
+
+```{sql connection=dbcon}
+INSERT INTO Subject(subjectId,content) VALUES
+(1,"R"),
+(2,"ML"),
+(3,"JAVA"),
+(4,"SQL");
+```
+
+```{sql connection=dbcon}
+INSERT INTO Lesson(tid,title,lengthInHrs,subjectID) VALUES
+(1,"Intro_R",4,1),
+(2,"Intro_C++",4,2),
+(3,"Intro_JAVA",4,3),
+(4,"Intro_SQL",4,4);
+```
+
+```{sql connection=dbcon}
+INSERT INTO Unit(cid,tid) VALUES
+("CS5200",1),
+("EECE2560",2);
+```
+
+```{sql connection=dbcon}
+INSERT INTO Prerequisite(tid,pid) VALUES
+(1,4),
+(2,3);
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Unit
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Lesson
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Prerequisite
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Subject
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Course
+```
+
+
+```{r}
+dbDisconnect(dbcon)
+```
+
+## How to update table constraints to integrate extensible dataset?
+For SQLITE, you can not simply do a “ALTER TABLE” command to update table constraints. I am sharing
+an easy solution according to the SQLITE Documentation which allows you to update your table constraints
+instead of excuting drop the table, update the schema, recreate the table and then insert new records.
+
+- Give wirte access: dbExecute(dbcon, “PRAGMA writable_schema = 1”)
+- Overwrite schema with your new constraints,e.g.
+  ```
+    UPDATE sqlite_master SET sql =
+    "CREATE TABLE Subject(
+     subjectId INT NOT NULL,
+     content TEXT NOT NULL,
+     PRIMARY KEY (sid),
+     CHECK (content IN (’ML’, ’SQL’, ’R’, ’JAVA’,’C’, ’C++’))"
+     WHERE type = ’table’ AND name = ’Subject’;
+  ```
+- Reopen/load SQLITE, simply restart SQLITE CLI.
+- Update table with new constraints happliy, you can always check your updated schema by use “.schema {TABLE_NAME}” command before you insert tuples.

@@ -1,0 +1,46 @@
+---
+title: "Assign4"
+author: Yuchao Su
+output: html_notebook
+---
+
+```{r}
+library(RSQLite)
+fpath = ("C:/Users/suyuc/Desktop/CS5200/")
+dbfile = "MediaDB.db"
+
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+```
+```{sql connection=dbcon}
+SELECT a.LastName, a.City, a.State FROM customers a join invoices b WHERE a.CustomerId=b.CustomerId GROUP by a.CustomerId;
+```
+```{sql connection=dbcon}
+SELECT a.Title, b.Name FROM albums a join artists b WHERE a.ArtistId=b.ArtistId; 
+```
+```{sql connection=dbcon}
+SELECT a.Country, Count(DISTINCT a.CustomerId) as num FROM customers a GROUP BY a.Country ORDER BY a.Country;
+```
+
+```{sql connection=dbcon}
+SELECT Count(DISTINCT a.CustomerId) as num FROM customers a WHERE a.CustomerId NOT IN (SELECT CustomerId FROM invoices)
+```
+
+```{sql connection=dbcon}
+SELECT Title FROM albums WHERE Title LIKE '%symphony%';
+```
+
+
+```{sql connection=dbcon}
+SELECT ar.ArtistId,ar.Name,SUM(t.UnitPrice) as price FROM tracks t JOIN albums a JOIN artists ar WHERE t.AlbumId=a.AlbumId and a.ArtistId=ar.ArtistId GROUP BY ar.ArtistId;  
+```
+
+```{sql connection=dbcon}
+SELECT a.ArtistId,a.Name, Count(t.Name) as Num FROM artists a JOIN albums al JOIN tracks t WHERE a.ArtistId=al.ArtistId and al.AlbumId=t.AlbumId GROUP BY a.Name ORDER BY Count(t.Name) desc limit 1;
+```
+```{sql connection=dbcon}
+SELECT g.Name, ROUND((SUM(t.Milliseconds)*2.778e-7),2) as HoursFROM FROM tracks t JOIN genres g WHERE g.GenreId=t.GenreId GROUP BY t.GenreId;
+```
+```{r}
+dbDisconnect(dbcon)
+```
+

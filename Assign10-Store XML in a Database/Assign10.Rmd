@@ -1,0 +1,119 @@
+
+```{r}
+library(RSQLite)
+library(XML)
+library(DBI)
+library(knitr)
+
+xmlfile <- "Books-v3.xml"
+xmlDOM <- xmlParse(xmlfile)
+dbfile = "Book.db"
+dbcon <- dbConnect(RSQLite::SQLite(), dbfile)
+r <- xmlRoot(xmlDOM)
+numBook <- xmlSize(r)
+```
+
+
+##Q2 Create a SQLite database that implements the schema
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS book
+```
+
+##Create Table
+```{sql connection=dbcon}
+CREATE TABLE book(
+id INT PRIMARY KEY,
+author TEXT,
+title TEXT,
+edition INT,
+genre TEXT,
+price TEXT,
+publish_date DATE,
+description TEXT
+)
+```
+
+##Q3Load the XML data from the file into R data frames
+##Create DataFrame
+```{r}
+book.df <- data.frame(id = vector(mode = "integer", length = numBook),
+                      author = vector(mode = "character", length = numBook),
+                      title = vector(mode = "character", length = numBook),
+                      edition = vector(mode = "integer", length = numBook),
+                      genre = vector(mode = "character", length = numBook),
+                      price = vector(mode = "character", length = numBook),
+                      publish_date = vector(mode = "character", length = numBook),
+                      description = vector(mode = "character", length = numBook))
+
+```
+
+
+
+##Parsing XML Into DataFrame
+```{r}
+for(i in 1:numBook)
+{
+  abook <- r[[i]]
+  
+  id <- xmlAttrs(abook)
+  author <- xmlValue(abook[[1]])
+  title <- xmlValue(abook[[2]])
+  if(xmlName(abook[[3]]) == "edition")
+  {
+    edition <- xmlValue(abook[[3]])
+    genre <- xmlValue(abook[[4]])
+    price <- xmlValue(abook[[5]])
+    publish_date <- xmlValue(abook[[6]])
+    description <- xmlValue(abook[[7]])
+  }
+  else
+  {
+    edition <- NULL
+    genre <- xmlValue(abook[[3]])
+    price <- xmlValue(abook[[4]])
+    publish_date <- xmlValue(abook[[5]])
+    description <- xmlValue(abook[[6]])}
+  
+  book.df[i,]$id <- id
+  book.df[i,]$author <- author
+  book.df[i,]$edition <- edition
+  book.df[i,]$title <- title
+  book.df[i,]$genre <- genre
+  book.df[i,]$price <- price
+  book.df[i,]$publish_date <- publish_date
+  book.df[i,]$description <- description
+}
+
+```
+
+##Q4 Transform data types as necessary and then save the data frames to the appropriate tables in the database using a strategy of your choice
+```{r}
+dbWriteTable(dbcon,"book",book.df,overwrite=T)
+```
+
+```{sql connection=dbcon}
+SELECT * FROM book
+```
+##Q5 A What is the number of genres have at least three books?
+```{sql connection=dbcon}
+SELECT COUNT(*) FROM (SELECT genre,COUNT(*) FROM book GROUP BY genre HAVING COUNT(id) >= 3)
+```
+##Q5 B What is the most recent year in which a publication was published?
+```{sql connection=dbcon}
+SELECT MAX(strftime('%Y', publish_date)) as Recent_Year FROM book
+```
+##Q5 C Find the number of books and average price for each genre.
+```{sql connection=dbcon}
+SELECT genre, COUNT(*), AVG(price) FROM book GROUP BY genre
+```
+##Q5 D List the title and author of all books that are less than 0.8*AVG or more than 1.2*AVG, where AVG is the average price of all books. 
+```{sql connection=dbcon}
+SELECT title, author FROM book WHERE (price < (SELECT AVG(price)*0.8 FROM book)) or (price > (SELECT AVG(price)*1.2 FROM book))
+```
+
+
+```{r}
+dbDisconnect(dbcon)
+```
+
+

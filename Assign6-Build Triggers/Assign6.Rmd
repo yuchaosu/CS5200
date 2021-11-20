@@ -1,0 +1,152 @@
+---
+title: "SU.CRDB.CS5200"
+author: Yuchao Su
+date: Oct 2, 2021
+output:
+  pdf_document: default
+  html_notebook: default
+---
+## Basic Config
+```{r}
+library(RSQLite)
+fpath = ("C:/Users/suyuc/Desktop/CS5200/")
+dbfile = "Course_Info_1.db"
+
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+```
+## Enable foreign key
+```{sql connection=dbcon}
+PRAGMA foreign_keys = ON;
+```
+
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Unit;
+```
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Course;
+```
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Prerequisite;
+```
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Lesson;
+```
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS Subject;
+```
+```{sql connection=dbcon}
+DROP TABLE  IF EXISTS UnitRecord;
+```
+
+## Create Table
+```{sql connection=dbcon}
+CREATE TABLE Course(
+cid TEXT PRIMARY KEY NOT NULL,
+title TEXT NOT NULL,
+lengthInDays INT NOT NULL
+);
+```
+##Trigger1
+I create a trigger cid_upper on Course. SQL is a case insensitive. So, cs5200, CS5200 are all same in SQL. If we have some constraint in program, that means the user must type in the  upper case. I design this trigger to release the user. They do not need to type in the uppercase in their input. In this trigger, we need uppercase the input, so we do the execution after insert. Then I use UPPER()function to realize. 
+```{sql connection=dbcon}
+CREATE TRIGGER IF NOT EXISTS cid_upper
+  AFTER INSERT ON Course
+  BEGIN
+    UPDATE Course
+        SET cid=UPPER(cid);
+  END;
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Unit(
+cid TEXT NOT NULL,
+tid INT NOT NULL,
+PRIMARY KEY(cid,tid),
+FOREIGN KEY(cid) REFERENCES Course(cid),
+FOREIGN KEY(tid) REFERENCES Lesson(tid)
+);
+```
+
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS UnitRecord (
+  GUID INTEGER PRIMARY KEY AUTOINCREMENT, 
+  cid TEXT NOT NULL, tid INT NOT NULL, 
+  topic_id TEXT NOT NULL, name TEXT NOT NULL, 
+  status Text NOT NULL, Timestamp datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Lesson(
+tid INT PRIMARY KEY NOT NULL,
+title TEXT NOT NULL,
+lengthInHrs INT NOT NULL,
+subjectId INT NOT NULL,
+FOREIGN KEY(subjectId) REFERENCES Subject(subjectId)
+);
+```
+
+##Trigger2
+I create a trigger length_check on Lesson.lengthInHrs before INSERT new row. As we all know, if we create a lesson with length 0 or less, it does not make any sense. So, we need a trigger to check if the lengthInHrs is at least 1 before insert.So in the trigger definition, it is need to be checked before the insert. Then create a case. In the case, if the Variable lengthInHrs is less than 1, the insert will be aborted and return 'Invalid Input'.
+```{sql connection=dbcon}
+CREATE TRIGGER IF NOT EXISTS length_check
+  BEFORE INSERT ON Lesson
+  BEGIN
+    SELECT
+      CASE
+        WHEN NEW.lengthInHrs<1
+        THEN RAISE(ABORT,'Invalid Input')
+    END;
+  END;
+```
+
+
+
+```{sql connection=dbcon}
+CREATE TABLE Subject(
+subjectId INT PRIMARY KEY,
+content TEXT,
+CHECK (content IN ("ML", "SQL", "R", "JAVA"))
+);
+```
+
+
+```{sql connection=dbcon}
+CREATE TABLE Prerequisite(
+tid INT NOT NULL,
+pid INT NOT NULL,
+PRIMARY KEY(tid,pid),
+FOREIGN KEY(pid) REFERENCES Lesson(tid),
+FOREIGN KEY(pid) REFERENCES Lesson(tid)
+);
+```
+
+## Test Table
+```{sql connection=dbcon}
+INSERT INTO Course(cid,title,lengthInDays) VALUES
+("Cs5200","DB",2),
+("EECE5550","MR",3),
+("EECE2560","C++",5);
+```
+
+```{sql connection=dbcon}
+INSERT INTO Subject(subjectId,content) VALUES
+(1,"R"),
+(2,"ML"),
+(3,"JAVA"),
+(4,"SQL");
+```
+
+```{sql connection=dbcon}
+INSERT INTO Lesson(tid,title,lengthInHrs,subjectID) VALUES
+(4,"Intro_SQL",0,4);
+```
+```{sql connection=dbcon}
+SELECT * FROM Course
+```
+
+
+```{r}
+dbDisconnect(dbcon)
+```

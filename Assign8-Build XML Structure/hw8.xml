@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<!DOCTYPE log
+[
+ <!ELEMENT log (Visit*,Page*,Visitor*)>
+ <!ELEMENT Page (url)>
+ <!ATTLIST Page pid CDATA #REQUIRED>
+ <!ELEMENT url (#PCDATA)>
+ <!ELEMENT Visit (vdate, vtime)>
+ <!ATTLIST Visit tid CDATA #REQUIRED>
+ <!ELEMENT vdate (#PCDATA)>
+ <!ELEMENT vtime (#PCDATA)>
+ <!ATTLIST Visit PageREF CDATA #REQUIRED>
+ <!ATTLIST Visit VisitorREF CDATA #REQUIRED>
+ <!ELEMENT Visitor (ip)>
+ <!ATTLIST Visitor vid CDATA #REQUIRED>
+ <!ELEMENT ip (#PCDATA)>
+]>
+
+<log>
+
+
+	 <Visit tid="1" PageREF="100" VisitorREF="101">
+         <vdate>2021-09-30</vdate>
+         <vtime>20:03:44</vtime>
+     </Visit>
+     
+     <Visit tid="2" PageREF="200" VisitorREF="102">
+         <vdate>2021-08-31</vdate>
+         <vtime>08:03:34</vtime>
+     </Visit>
+     
+     <Visit tid="3" PageREF="200" VisitorREF="103">
+         <vdate>2021-10-31</vdate>
+         <vtime>16:23:56</vtime>
+     </Visit>
+	 
+	 <Visit tid="4" PageREF="400" VisitorREF="104">
+         <vdate>2021-11-31</vdate>
+         <vtime>19:23:56</vtime>
+     </Visit>
+	 
+	 <Visit tid="5" PageREF="200" VisitorREF="103">
+         <vdate>2021-11-31</vdate>
+         <vtime>23:23:56</vtime>
+     </Visit>
+
+     <Page pid="100">
+         <url>http://artificium.us/lessons/l101.html</url>
+     </Page>
+     
+     <Page pid="200">
+         <url>http://articificum.us/courses/cs1100.html</url>
+     </Page>
+     
+     <Page pid="300">
+         <url>http://articificum.us/courses/eece1100.html</url>
+     </Page>
+     
+     <Page pid="400">
+         <url>http://articificum.us/courses/me2205.html</url>
+     </Page>
+	 
+	 <Page pid="500">
+         <url>http://articificum.us/courses/be7205.html</url>
+     </Page>
+	 
+     <Visitor vid="101">
+         <ip>165.11.33.45</ip>
+     </Visitor>
+     <Visitor vid="102">
+         <ip>192.168.1.1</ip>
+     </Visitor>
+     
+     <Visitor vid="103">
+         <ip>255.255.0.0</ip>
+     </Visitor>
+     
+     <Visitor vid="104">
+         <ip>192.168.0.1</ip>
+     </Visitor>
+	 
+	 <Visitor vid="105">
+         <ip>24.147.81.162</ip>
+     </Visitor>
+     
+     
+</log>

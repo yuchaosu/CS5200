@@ -1,0 +1,60 @@
+---
+title: "SU.CRDB.CS5200"
+author: Yuchao Su
+date: Oct 2, 2021
+output:
+  pdf_document: default
+  html_notebook: default
+---
+##Config
+```{r}
+library(RSQLite)
+library(sqldf)
+fpath = ("C:/Users/suyuc/Desktop/CS5200/")
+dbfile = "MediaDB.db"
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+```
+
+##Q1
+```{r}
+sqlCmd<-"SELECT * FROM invoice_items"
+rs<-dbGetQuery(dbcon,sqlCmd)
+rs$ExtPrice<-rs$UnitPrice*rs$Quantity
+mu<-format(round(mean(rs$ExtPrice),2))
+rs
+mu
+```
+##Q2
+```{r}
+rs2 <- sqldf("select InvoiceId inv_id, count(Quantity) num_of_items, sum(ExtPrice) total from rs group by InvoiceId")
+rs2
+```
+
+##Q3
+```{r}
+ggplot(data=rs2, aes(x=num_of_items, y=total, color=inv_id)) + geom_point(alpha=0.8, size=3)
+```
+
+##Q4
+```{r}
+alterTableCmd <- "ALTER TABLE invoices ADD COLUMN DiscPrice NUMERIC(10, 2);"
+dbGetQuery(dbcon, alterTableCmd)
+```
+
+```{r}
+updateStmt <- "
+update invoices
+set DiscPrice = total * 0.9
+where InvoiceId in
+(
+select InvoiceId inv_id from invoice_items group by InvoiceId having COUNT(quantity) > 5
+);"
+dbGetQuery(dbcon, updateStmt)
+```
+##Q5
+```{r}
+testQuery <- "select * from invoices limit 20;"
+test.df <- dbGetQuery(dbcon, testQuery)
+head(test.df)
+```
+
