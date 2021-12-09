@@ -1,0 +1,448 @@
+---
+title: "Practicum II"
+Author: Cole Crescas & Nick Algernon Jackson
+output: html_document
+---
+
+```{r, echo=FALSE}
+library(XML)
+library(dplyr)
+library(dbplyr)
+library(RSQLite)
+library(DBI)
+library(knitr)
+library(sqldf)
+library(ggplot2)
+```
+
+```{r}
+path <- "/Users/colecrescas/Downloads/"
+fn <- "pubmed_sample (1).xml"
+fp <- paste0(path,fn)
+
+xmlObj <- xmlParse(fp)
+xmlObjTree <- xmlTreeParse(fp)
+
+```
+
+![Part 1](/Users/colecrescas/Downloads/Practicum II - Part 1.png)
+Part 1.2 Realize schema in SQLite
+
+```{r}
+dbcon <- dbConnect(RSQLite::SQLite())
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Journal
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Author
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS History
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS PubMed_Article
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Author (
+  Author_id INT,
+  PMID INT,
+  LastName VARCHAR(32),
+  ForeName VARCHAR(32),
+  PRIMARY KEY (Author_id)
+  FOREIGN KEY (PMID) REFERENCES PubMed_Article(PMID)
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE History (
+  History_id INT NOT NULL,
+  Year INT,
+  Month INT,
+  Day INT,
+  PRIMARY KEY (History_id)
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE PubMed_Article (
+  PMID INT,
+  History_id INT,
+  Author_id INT,
+  ISSN INT,
+  PRIMARY KEY (PMID),
+  FOREIGN KEY (PMID) REFERENCES Author(PMID),
+  FOREIGN KEY (History_id) REFERENCES History(History_id),
+  FOREIGN KEY (Author_id) REFERENCES Author(Author_id),
+  FOREIGN KEY (ISSN) REFERENCES Journal(ISSN)
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Journal (
+  ISSN INT,
+  Volume INT,
+  Issue INT,
+  Title VARCHAR(250),
+  ISOAbbreviation VARCHAR(32),
+  PRIMARY KEY (ISSN)
+);
+```
+***PART 1.3 EXTRACT AND TRANSFORM DATA ***
+
+Creating df for each entity
+```{r}
+df.Journal <- "create"
+df.PubMed_Article <- "make"
+df.History <- "start"
+#df.Author <- "Begin"
+
+```
+
+Fill Journal df with ISSN 
+```{r}
+xpathEx <- "//ISSN"
+df.Journal$ISSN <- xpathSApply(xmlObj,xpathEx,xmlValue)
+df.Journal$ISSN
+
+```
+
+Fill Journal with Volume 
+```{r}
+xpathEx <- "//Volume"
+df.Journal$Volume <- xpathSApply(xmlObj,xpathEx,xmlValue)
+df.Journal$Volume
+
+```
+
+Fill Journal with Issue
+```{r}
+xpathEx <- "//Issue"
+df.Journal$Issue <- xpathSApply(xmlObj,xpathEx,xmlValue)
+df.Journal$Issue
+
+```
+
+Fill Journal with Title 
+```{r}
+xpathEx <- "//Journal/Title"
+df.Journal$Title <- xpathSApply(xmlObj,xpathEx, xmlValue)
+df.Journal$Title
+
+```
+
+Fill Journal with ISOAbbreviation
+```{r}
+xpathEx <- "//Journal/ISOAbbreviation"
+df.Journal$ISOAbbreviation <- xpathSApply(xmlObj,xpathEx, xmlValue)
+df.Journal$ISOAbbreviation
+
+```
+
+```{r}
+df.Journal[1] <- NULL
+df.Journal_convert <- as.data.frame(df.Journal)
+df.Journal_convert
+```
+
+Filling History Year
+```{r}
+xpathEx <- "//History/PubMedPubDate[@PubStatus='pubmed']/Year"
+df.History$Year <- xpathSApply(xmlObj,xpathEx, xmlValue)
+df.History$Year
+```
+
+Filling History Month
+```{r}
+xpathEx <- "//History/PubMedPubDate[@PubStatus='pubmed']/Month"
+df.History$Month <- xpathSApply(xmlObj,xpathEx, xmlValue)
+df.History$Month
+```
+
+Filling History Day
+```{r}
+xpathEx <- "//History/PubMedPubDate[@PubStatus='pubmed']/Day"
+df.History$Day <- xpathSApply(xmlObj,xpathEx, xmlValue)
+df.History$Day
+```
+
+```{r}
+df.History[1] <- NULL
+df.History_convert <- as.data.frame(df.History)
+n.History_convert <- nrow(df.History_convert)
+df.History_convert$History_id <- seq(1,n.History_convert)
+df.History_convert$History_id 
+df.History_convert
+```
+
+```{r}
+xpathEx <- "//MedlineCitation/PMID"
+PMID <- xpathSApply(xmlObj,xpathEx, xmlValue)
+PMID
+```
+
+
+```{r}
+df.PubMed_Article$ISSN <- df.Journal$ISSN
+df.PubMed_Article$History_id <- df.History_convert$History_id
+df.PubMed_Article$PMID <- PMID
+df.PubMed_Article_convert <- as.data.frame(df.PubMed_Article[c("ISSN", "History_id", "PMID")])
+df.PubMed_Article_convert
+```
+
+
+Fill Author df with LastName
+```{r}
+xpathEx <- "//MedlineCitation[PMID='23874253']/Article/AuthorList/Author/LastName"
+
+Author_last <- xpathSApply(xmlObj, xpathEx, xmlValue)
+Author_last
+```
+
+```{r}
+df.Author_total <- data.frame()
+df.Author_total
+```
+
+```{r warning=FALSE}
+datalist = list()
+for (i in 1:19) {
+  df.Author <- "trial"
+  x <- paste0("//MedlineCitation[PMID='",as.numeric(PMID[i]),"' ]/Article/AuthorList/Author/LastName")
+  y <- paste0("//MedlineCitation[PMID='",as.numeric(PMID[i]),"' ]/Article/AuthorList/Author/ForeName")
+
+  last_name <- xpathSApply(xmlObj, x, xmlValue)
+  first_name <- xpathSApply(xmlObj, y, xmlValue)
+  
+  df.Author$LastName <- last_name
+  df.Author$FirstName <- first_name
+  for (x in 1:length(last_name)) {df.Author$PMID[x] <- PMID[i]}
+  df.Author_dim <- as.data.frame(df.Author)
+  datalist[[i]] <- df.Author_dim
+
+}
+df.Author_total <- do.call(rbind, datalist)
+df.Author_total[1] <- NULL
+df.Author_total
+
+```
+
+Convert df's + removing value from first column 
+```{r}
+df.Author_Unique <- df.Author_total[1:2] %>%
+  unique()
+
+df.Author_Unique$Author_id <- seq(1, nrow(df.Author_Unique))
+
+df.Author_Unique
+```
+```{r linkFKs}
+
+for (r in 1:nrow(df.Author_total)) {
+
+  a <- df.Author_Unique$Author_id[which
+                               (df.Author_Unique$LastName ==
+                                   df.Author_total$LastName[r] &
+                                   df.Author_Unique$FirstName ==
+                                   df.Author_total$FirstName[r]) ]
+  
+  df.Author_total$Author_id[r] <- a
+  
+}
+```
+
+```{r}
+df.Author_total
+```
+
+## Transferring data to SQLite Table
+```{r}
+dbWriteTable(dbcon, "Author", df.Author_total, overwrite = T)
+```
+
+```{r}
+dbWriteTable(dbcon, "PubMed_Article", df.PubMed_Article_convert, overwrite = T)
+```
+
+```{r}
+dbWriteTable(dbcon, "History", df.History_convert, overwrite = T)
+```
+
+```{r}
+dbWriteTable(dbcon, "Journal", df.Journal_convert, overwrite = T)
+```
+
+```{sql connection=dbcon}
+SELECT * from PubMed_Article JOIN Author ON Pubmed_Article.PMID = Author.PMID
+;
+```
+![Part 2](/Users/colecrescas/Downloads/Practicum II - Part 2.1.png)
+## Part 2 Fact Table
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS dimJournal
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS dimAuthor
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS dimHistory
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Article_fact
+```
+
+```{sql connection=dbcon}
+CREATE TABLE dimAuthor (
+  Author_id INT,
+  PMID INT,
+  LastName VARCHAR(32),
+  ForeName VARCHAR(32),
+  PRIMARY KEY (Author_id)
+  FOREIGN KEY (PMID) REFERENCES PubMed_Article(PMID)
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE dimHistory (
+  History_id INT NOT NULL,
+  Year INT,
+  Month INT,
+  Day INT,
+  PRIMARY KEY (History_id)
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Article_Fact (
+  PMID INT,
+  History_id INT,
+  Author_id INT,
+  ISSN INT,
+  PRIMARY KEY (PMID),
+  FOREIGN KEY (PMID) REFERENCES Author(PMID),
+  FOREIGN KEY (History_id) REFERENCES History(History_id),
+  FOREIGN KEY (Author_id) REFERENCES Author(Author_id),
+  FOREIGN KEY (ISSN) REFERENCES Journal(ISSN)
+);
+```
+
+```{sql connection=dbcon}
+CREATE TABLE dimJournal (
+  ISSN INT,
+  Volume INT,
+  Issue INT,
+  Title VARCHAR(250),
+  ISOAbbreviation VARCHAR(32),
+  PRIMARY KEY (ISSN)
+);
+```
+
+```{r}
+dbWriteTable(dbcon, "dimAuthor", df.Author_total, overwrite = T)
+```
+
+```{r}
+dbWriteTable(dbcon, "Article_Fact", df.PubMed_Article_convert, overwrite = T)
+```
+
+```{r}
+dbWriteTable(dbcon, "dimHistory", df.History_convert, overwrite = T)
+```
+
+```{r}
+dbWriteTable(dbcon, "dimJournal", df.Journal_convert, overwrite = T)
+```
+
+## Part 2.2 create Summary Tables
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Master 
+```
+
+```{sql connection=dbcon}
+CREATE TABLE temp AS SELECT * from Article_Fact JOIN dimAuthor ON Article_Fact.PMID = dimAuthor.PMID JOIN dimHistory ON dimHistory.History_id = Article_Fact.History_id JOIN dimJournal ON dimJournal.ISSN = Article_Fact.ISSN
+```
+
+```{sql connection=dbcon}
+CREATE TABLE MASTER AS SELECT ISSN, History_id, PMID, LastName, FirstName, Author_id, Year, Month, Day, Volume, Issue, Title, ISOAbbreviation FROM temp
+```
+
+```{r}
+df.MASTER <- dbGetQuery(dbcon, "SELECT ISSN, History_id, PMID, LastName, FirstName, Author_id, Year, Month, Day, Volume, Issue, Title, ISOAbbreviation FROM temp")
+df.MASTER$Month <- as.integer(df.MASTER$Month)
+df.MASTER$Year <- as.integer(df.MASTER$Year)
+df.MASTER
+```
+
+```{r}
+dbWriteTable(dbcon, "MASTER", df.MASTER, overwrite = T)
+```
+
+![Part 1](/Users/colecrescas/Downloads/Practicum II - Part2.2.png)
+
+# Journal SUMMARY QUERY 
+```{r}
+df.Journal_summ <- dbGetQuery(dbcon, "SELECT Year, CASE WHEN Month <= 3 THEN '1' WHEN Month >= 4 AND Month <= 6 THEN '2' WHEN Month >= 7 AND Month <= 9 THEN '3' WHEN Month >= 10 THEN '4' END AS Quarter, ISSN, Title, count (DISTINCT PMID) AS NumArticles FROM MASTER GROUP BY Title ORDER BY Quarter")
+
+dbWriteTable(dbcon, "Journal_Summary", df.Journal_summ, overwrite = T)
+```
+# Author Summary Table
+```{r}
+df.Author_summ <- dbGetQuery(dbcon, "SELECT Year, CASE WHEN Month <= 3 THEN '1' WHEN Month >= 4 AND Month <= 6 THEN '2' WHEN Month >= 7 AND Month <= 9 THEN '3' WHEN Month >= 10 THEN '4' END AS Quarter, FirstName, LastName, Author_id, count(DISTINCT PMID) AS NumArticles FROM MASTER GROUP BY LastName ORDER BY Author_id")
+
+dbWriteTable(dbcon, "Author_Summary", df.Author_summ, overwrite = T)
+```
+
+
+## Part 3
+```{sql connection=dbcon}
+SELECT SUM(NumArticles), Quarter FROM Journal_Summary GROUP BY Quarter
+```
+
+```{sql connection=dbcon}
+SELECT SUM(NumArticles), Year FROM Journal_Summary GROUP BY Year
+```
+```{sql connection=dbcon}
+SELECT SUM(NumArticles) AS 'Number of Published Authors', Quarter FROM Author_Summary GROUP BY Quarter
+```
+```{sql connection=dbcon}
+SELECT SUM(NumArticles) AS 'Number of Published Authors', Year FROM Author_Summary GROUP BY Year
+```
+```{sql connection=dbcon}
+SELECT NumArticles, FirstName, LastName FROM Author_Summary ORDER BY NumArticles DESC LIMIT 5
+```
+
+Chart for Num Articles per Quarter by Journals 
+```{r}
+
+basechart <- (ggplot(df.Journal_summ, aes(x=Quarter, fill=Quarter))
+              + geom_bar()) + labs(y="Articles", title='Num of Articles per Quarter by Journal')
+
+basechart 
+```
+Chart for Num Articles by Author
+```{r}
+
+basechart <- (ggplot(df.Author_summ, aes(x=Quarter, fill=Quarter)) + geom_bar()) +
+  labs(y="Number of Published Authors", title='Number of Published Authors by Quarter')
+  
+basechart 
+
+```
+
+We pivoted back and forth for the format of the summary tables.  Intially, we were aiming to have on fact table displaying values for both journal and author but after exploring the data further we thought it would be more straight forward to display the data into two tables.
+
+Our analysis shows that more articles were published in the fourth quarter of the year, specifically in the year 2012.  This could be due to the time when journals are expecting to sell issues (around the holidays) or due to external geopolitical factors.  However, with a dataset this small, N<20, it is tough to draw any statistically significant insights from our findings.
+
+In addition, from the final table you can see that some authors wrote many more articles than others.  Madhu Mazmudar was even involved in every article from the sample set.  This could skew some final data.
+```{r}
+dbDisconnect(dbcon)
+```

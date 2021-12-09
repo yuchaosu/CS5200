@@ -1,0 +1,195 @@
+```{r}
+library(RSQLite)
+library(XML)
+library(DBI)
+library(knitr)
+library(dplyr)
+library(dbplyr)
+library(sqldf)
+library(ggplot2)
+
+
+xmlfile <- "pubmed_sample.xml"
+xmlDOM <- xmlParse(xmlfile)
+dbfile = "pubmed.db"
+dbcon <- dbConnect(RSQLite::SQLite(), dbfile)
+```
+
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS AuthorsList
+```
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Authors
+```
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Journals
+```
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Articles
+```
+
+
+```{sql connection=dbcon}
+CREATE TABLE Authors(
+id INT PRIMARY KEY,
+Last_Name TEXT,
+First_Name TEXT,
+Initials TEXT,
+Affiliation TEXT
+)
+```
+```{sql connection=dbcon}
+CREATE TABLE Journals(
+ISSN INT PRIMARY KEY,
+Title TEXT,
+Volume INT,
+Issue INT,
+PubDate Date
+)
+```
+```{sql connection=dbcon}
+CREATE TABLE Articles(
+PMID INT PRIMARY KEY,
+Date_Created DATE,
+Article_Title TEXT
+)
+```
+```{sql connection=dbcon}
+CREATE TABLE AuthorList(
+PMID INT,
+AuthorID INT,
+PRIMARY KEY(PMID,AuthorID),
+FOREIGN KEY(PMID) REFERENCES Articles(PMID),
+FOREIGN KEY(AuthorID) REFERENCES Authors(id)
+)
+```
+
+```{r}
+Article <- data.frame(PMID = integer(),
+                         Date_Created = character(), 
+                         Article_Title = character(),
+                         stringsAsFactors = F
+                         )
+
+Journal <- data.frame(ISSN = integer(),
+                         Title = character(),
+                         Volume = character(),
+                         ISSUE = character(),
+                         PubDate = character(),
+                         stringsAsFactors = F)
+
+Author <- data.frame(id = integer(),
+                        Last_Name = character(),
+                        First_Name = character(),
+                        Initials = character(),
+                        Affiliation = character(),
+                        stringsAsFactors = F)
+
+AuthorList <- data.frame(PMID = integer(),
+                         AuthorID = integer(),
+                         stringsAsFactors = F)
+
+```
+
+```{r}
+PubDate <- xpathSApply(xmlDOM,"//PubDate",xmlValue)
+PubDate
+```
+
+
+```{r}
+ISSN <- xpathSApply(xmlDOM,"//ISSN",xmlValue)
+Title <- xpathSApply(xmlDOM,"//Journal/Title",xmlValue)
+Volume <- xpathSApply(xmlDOM,"//Volume",xmlValue)
+ISSUE <- xpathSApply(xmlDOM,"//Issue",xmlValue)
+PubDate <- xpathSApply(xmlDOM,"//PubDate",xmlValue)
+for(i in 1 : length(Journaltemp)){
+  row <- nrow(Journal) + 1
+  Journal[i, 1] <- ISSN[i]
+  Journal[i, 2] <- Title[i]
+  Journal[i, 3] <- Volume[i]
+  Journal[i, 4] <- ISSUE[i]
+  Journal[i, 5] <- PubDate[i]
+}
+Journal
+```
+
+
+```{r}
+PMID <- xpathSApply(xmlDOM,"//MedlineCitation/PMID",xmlValue)
+DateCreated <- xpathSApply(xmlDOM,"//MedlineCitation/DateCreated",xmlValue)
+Article_Title <- xpathSApply(xmlDOM,"//ArticleTitle",xmlValue)
+for(i in 1 : length(PMID)){
+  row <- nrow(Article) + 1
+  Article[i, 1] <- PMID[i]
+  Article[i, 2] <- DateCreated[i]
+  Article[i, 3] <- Article_Title[i]
+
+}
+Article
+```
+
+```{r}
+LastName <- xpathSApply(xmlDOM,"//LastName",xmlValue)
+FirstName <- xpathSApply(xmlDOM,"//ForeName",xmlValue)
+Initials <- xpathSApply(xmlDOM,"//Initials",xmlValue)
+Aff <- xpathSApply(xmlDOM,"//Author")
+for(i in 1 : length(LastName)){
+  row <- nrow(Author) + 1
+  Author[i,1] <- i
+  Author[i,2] <- LastName[i] 
+  Author[i,3] <- FirstName[i]
+  Author[i,4] <- Initials[i]
+   if(!is.null(Aff[[i]][[4]]))
+    Author[i,5] <- xmlValue(Aff[[i]][[4]])
+ 
+}
+Author<-Author %>% distinct(Last_Name, First_Name, .keep_all = TRUE)
+Author
+```
+
+```{r}
+PMID <- xpathSApply(xmlDOM,"//MedlineCitation/PMID",xmlValue)
+a<-1
+for(i in 1 : length(PMID)){
+  
+  x <- paste0("//MedlineCitation[PMID='",as.numeric(PMID[i]),"' ]/Article/AuthorList/Author/LastName")
+  y <- paste0("//MedlineCitation[PMID='",as.numeric(PMID[i]),"' ]/Article/AuthorList/Author/ForeName")
+  last_name <- xpathSApply(xmlDOM, x, xmlValue)
+  first_name <- xpathSApply(xmlDOM, y, xmlValue)
+  for(j in 1 : length(last_name)){
+    row <- nrow(AuthorList) + 1
+    AuthorList[a,1] <- PMID[i]
+    sql<-paste0("select id from Author where Last_Name=","\"",last_name[j],"\" ","and"," First_Name=","\"",first_name[j],"\"")
+    A_ID<-sqldf(sql)
+    AuthorList[a,2] <- A_ID
+    a<-a+1
+  } 
+}
+AuthorList
+```
+```{r}
+dbWriteTable(dbcon, "Authors", Author, overwrite = T)
+```
+
+```{r}
+dbWriteTable(dbcon, "Articles", Article, overwrite = T)
+```
+
+```{r}
+dbWriteTable(dbcon, "Journals", Journal, overwrite = T)
+```
+
+```{r}
+dbWriteTable(dbcon, "AuthorList", AuthorList, overwrite = T)
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Authors
+```
+
+
+```{r}
+dbDisconnect(dbcon)
+```
