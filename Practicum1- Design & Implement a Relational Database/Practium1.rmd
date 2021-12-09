@@ -1,0 +1,262 @@
+---
+title: "Practicum 1"
+output: html_notebook
+---
+
+```{r}
+.libPaths("D:\\R\\R-4.1.1\\library\\")
+library(DBI)
+library(RMySQL)
+con<-dbConnect(MySQL(),host="localhost",port=3306,dbname='bird_strike',user="root",password="123456")
+```
+
+```{r}
+library(readr)
+library(sqldf)
+options(sqldf.driver = "SQLite")
+BirdStrikes <- read_csv("BirdStrikesData.csv",show_col_types = FALSE)
+incidents<-sqldf('select "Record ID" as ID,ifnull("Airport: Name","nonknown")as Airport, FlightDate as Date, ifnull("Aircraft: Airline/Operator","nonknown") as Airline, "Aircraft: Make/Model" as Aircraft, ifnull("When: Phase of flight","unknown") as Phase, "Effect: Impact to flight" as Impact from BirdStrikes; ')
+incidents
+```
+
+
+
+
+```{r}
+airlines<-sqldf('select distinct("Aircraft: Airline/Operator") airline_name FROM BirdStrikes')
+airlines<-na.omit(airlines)
+airlines[nrow(airlines)+1,]=c("nonknown")
+airlines
+airports<-sqldf('select distinct("Airport: Name") airport_name,"Origin State" state FROM BirdStrikes')
+airports<-na.omit(airports)
+airports[nrow(airports)+1,]=c("nonknown")
+airports
+
+```
+
+```{r}
+phases<-sqldf('select distinct(Phase) phase FROM incidents')
+phases$phase_new <- c('inflight','landing','landing','takeoff','inflight','unknown','unknown','unknown')
+phases
+```
+```{sql connection=con}
+DROP TABLE IF EXISTS incidents
+```
+
+```{sql connection=con}
+DROP TABLE IF EXISTS airlines
+```
+
+```{sql connection=con}
+DROP TABLE IF EXISTS airports
+```
+
+
+
+```{sql connection=con}
+CREATE TABLE airlines(
+  aid INT PRIMARY KEY, 
+  code TEXT, 
+  airline TEXT);
+```
+
+```{sql connection=con}
+CREATE TABLE airports(
+   pid INT PRIMARY KEY ,
+   code TEXT, 
+   name TEXT, 
+   city TEXT, 
+   state TEXT, 
+   country TEXT);
+```
+
+```{sql connection=con}
+CREATE TABLE incidents(
+iid INT PRIMARY KEY,
+i_date DATE, 
+depPort INT, 
+arrPort INT,
+airline INT, 
+aircraft TEXT, 
+flightPhase TEXT, 
+impact TEXT,
+FOREIGN KEY(depPort) REFERENCES airports(pid),
+FOREIGN KEY(arrPort) REFERENCES airports(pid),
+FOREIGN KEY(airline) REFERENCES airlines(aid)
+);
+```
+
+
+
+
+
+
+```{r}
+insert_airlines <- function() {
+  
+
+  for (i in 1:nrow(airlines)) {
+    airline<-paste0('"',airlines[i,1],'"')
+
+  cmd<-paste0('insert into airlines(aid,airline) values (',i,',',airline,')')
+      dbSendQuery(con,cmd)
+  }
+  
+}
+insert_airlines ()
+```
+
+```{r}
+insert_airports <- function() {
+  
+
+  for (i in 1:nrow(airports)) {
+
+
+airport<-paste0('"',airports[i,1],'"')
+
+      if(is.na(airports[i,2])) {
+        state<-'NULL'
+      } else {
+      state<-paste0('"',airports[i,2],'"')
+      }
+      cmd<-paste0('insert into airports(pid,name,state) values (',i,',',airport,',',state,')')
+      dbSendQuery(con,cmd)
+  }
+}
+  
+insert_airports ()
+```
+
+```{r}
+
+linecmd<-"select * from airlines"
+airlines<-dbGetQuery(con,linecmd)
+airlines
+portcmd<-"select * from airports"
+airports<-dbGetQuery(con,portcmd)
+airports
+
+```
+
+
+```{r}
+insert_incident <- function() {
+
+  for (i in 1:nrow(incidents)) {
+  #for (i in 1:130) {
+    id<-paste0('"',incidents[i,1],'"')
+
+   
+        query<-paste0('select pid from airports where name=','"',incidents[i,2],'"')
+        #airport<-paste0('"',incidents[i,2],'"')
+        airport<-sqldf(query)
+        airport1<-airport[1,1]
+    
+    date<-incidents[i,3]
+    if(is.na(date)) 
+      {
+      date<-'NULL'
+      } else 
+        {
+        date<-strsplit(date,"/")
+        date<-paste(substr(date[[1]][[3]],1,4),date[[1]][[1]],date[[1]][[2]], sep = "-")
+        date<-paste0('"',date,'"')
+      }
+     
+        query<-paste0('select aid from airlines where airline=','"',incidents[i,4],'"')
+        airline<-sqldf(query)
+        #airline<-paste0('"',incidents[i,4],'"')
+        airline1<-airline[1,1]
+     
+      
+      if(is.na(incidents[i,5])){
+         aircraft<-'NULL'
+      }else
+        {
+      #cid<-sqldf()
+      aircraft<-paste0('"',incidents[i,5],'"')}
+      #if(is.na(incidents[i,6])){
+       # phase<-"unknow"
+      #}else
+       # {
+        query<-paste0('select "phase_new" from phases where phase=','"',incidents[i,6],'"')
+        phase<-sqldf(query)
+        phase<-paste0('"',phase,'"')
+        #}
+      if(is.na(incidents[i,7])){
+        impact<-'NULL'
+      }else
+        {
+      impact<-paste0('"',incidents[i,7],'"')}
+        date
+        airport1
+        airline1
+        aircraft
+        phase
+        impact
+      cmd<-paste0('insert into incidents values (',id,',',date,',',airport1,',',airport1,',',airline1,',',aircraft,',',phase,',',impact,')')
+      dbSendQuery(con,cmd)
+  }
+}
+
+insert_incident ()
+```
+
+```{sql connection=con}
+SELECT b.airline,count(i.iid) from incidents i join airports a on a.pid=i.arrPort join airlines b where i.airline = b.aid and a.name='LAGUARDIA NY' and i.flightPhase='landing' group by i.airline;
+```
+
+```{sql connection=con}
+SELECT a.airport , MAX(a.num) as nums from (SELECT p.name as airport, count(*) as num from incidents i join airports p on i.depPort=p.pid join airlines l on l.aid=i.airline where l.airline  not in ('MILITARY','BUSINESS','PRIVATELY OWNED') group by p.name) as a
+```
+```{sql connection=con}
+SELECT COUNT(*) FROM incidents GROUP BY iid;
+```
+
+```{sql connection=con}
+SELECT YEAR(i_date) as year, COUNT(*) FROM incidents GROUP BY year;
+```
+```{sql connection=con}
+SELECT YEAR(i_date) as year, COUNT(*) FROM incidents WHERE YEAR(i_date) > 2005 AND YEAR(i_date) < 2011 GROUP BY year;
+```
+```{r}
+library(ggplot2)
+cmd <- "SELECT YEAR(i_date) as year, COUNT(*) as incidentNum FROM incidents WHERE YEAR(i_date) >= 2005 AND YEAR(i_date) <= 2011 GROUP BY year;"
+rs <- dbGetQuery(con, cmd)
+graph<-ggplot(rs, aes(x=year, y=incidentNum)) + geom_line()
+graph + ggtitle("the Number of Accidents from 2005 to 2011")
+```
+
+```{sql connection=con}
+DROP PROCEDURE IF EXISTS removeIncident
+```
+
+```{sql connection=con}
+SELECT COUNT(*) FROM incidents;
+```
+
+```{sql connection=con}
+CREATE PROCEDURE removeIncident(IN id INT)
+BEGIN
+	DELETE FROM incidents Where iid = id;
+END
+```
+
+```{sql connection=con}
+call removeIncidents(23411);
+```
+
+```{sql connection=con}
+SELECT COUNT(*) FROM incidents;
+```
+
+
+```{r}
+dbDisconnect(con)
+```
+
+
+
+
+
